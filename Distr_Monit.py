@@ -14,7 +14,7 @@ from Logger import logger as myLogger
 # |rozmiar(kolejki)|kolejka|
 # |rozmiar(tablicy)|tablica|
 # |rozmiar(zmiennych współdzielonych)|zmienne współdzielone|
-# gdzie rozmiar ma ustaloną wielkość 32 bitów i oznacza ilość bajtów obiektu w nawiasach ()
+# gdzie rozmiar ma ustaloną wielkość 32 bitów i oznacza rozmiar obiektu w nawiasach ()
 
 
 # Implementacja tokenu:
