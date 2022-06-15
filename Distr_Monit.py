@@ -84,8 +84,8 @@ class ExchangeTokenOrRNi():
 # Wykorzystujący do komunikacji PUB-SUB zmq
 class DistributedMonitor():
     def end_work(self):
-        myLogger.debug("Adios. My id: " + self.my_id + ".")
         # NOTE: PROBLEM ZGUBIONEGO TOKENU
+        myLogger.debug("Adios. My id: " + self.my_id + ".")
         # Zatrzymanie komunikacji
         self.stop_zmq()
     # Init monitora rozproszonego
@@ -182,10 +182,9 @@ class DistributedMonitor():
         self.pollerIN = zmq.Poller()   
         # Rejestracja gniazda w pollerze
         self.pollerIN.register(self.sub_sock, zmq.POLLIN)
-        # events_from_poll = self.pollerIN.poll(timeout=2000) 
-        # myLogger.debug("ZMQ Subscriber initiated. \n" + \
-        #     "\tEvents ready to be processed: \n\t" + str(events_from_poll)) 
-        myLogger.debug("ZMQ Subscriber initiated.")    
+        events_from_poll = self.pollerIN.poll(timeout=1000) 
+        myLogger.debug("ZMQ Subscriber initiated. \n" + \
+            "\tEvents ready to be processed: \n\t" + str(events_from_poll))
     # Funkcja do odbierania wiadomości
     def receiver_fun(self):
         # Pętla działająca dopóki nie wyłączymy wątku odbiornika
@@ -291,7 +290,8 @@ class DistributedMonitor():
         myLogger.debug("ZMQ stopped.")
     # Wysłanie tokenu
     def send_token(self, receiver):
-        myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")
+        # Odebranie sobie tokenu
+        self.got_token = False
         # Tworzenie komunikatu
         snd_msg = ExchangeTokenOrRNi(rcvfrom=self.my_id, 
             Qsize=self.Q.__sizeof__, Q=self.Q, 
@@ -299,7 +299,9 @@ class DistributedMonitor():
             SDsize=self.shared_obj.__sizeof__, SD=self.shared_obj,
             sendto=receiver)
         # Wysyłanie spakowanego komunikatu
+        myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")
         self.pub_sock.send(pickle.dumps(snd_msg))
+        myLogger.debug("Token sent from: " + self.my_id + " to: " + receiver + ".")
     # Zwolnienie dostępu do zasobu (współdzielonego obiektu danych)
     # funkcja nic nie zwraca - odsyła token 
     def release(self, shared_data_obj):
@@ -331,8 +333,6 @@ class DistributedMonitor():
             if self.Q:
                 # Wyciągnięcie pierwszego współpracownika z Q
                 next_receiver = self.Q.pop(0)
-                # Odebranie sobie tokenu
-                self.got_token = False
                 # Wysłanie do niego tokenu
                 self.send_token(receiver=next_receiver)
             # Wychodzę z sekcji krytycznej
@@ -340,17 +340,17 @@ class DistributedMonitor():
             myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
     # Publikacja zaktualizowanej swojej wartości w tablicy RNi wysyłając żądanie tokenu
     def pub_REQUEST(self):
-        myLogger.debug("Publishing my RNi[i]. My id: " + self.my_id + ".")
         # Tworzenie komunikatu
         snd_msg = ExchangeTokenOrRNi(rcvfrom=self.my_id, rni=self.RNi[self.my_id])
         # Wysyłanie spakowanego komunikatu
+        myLogger.debug("Sending REQUEST for token. My id:" + self.my_id + ".")
         self.pub_sock.send(pickle.dumps(snd_msg))
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
     def acquire(self):
-        myLogger.debug("Trying to acquire... My id:" + self.my_id + ".")
         # Acquire lock try sth and then finall release
         with self.lock:
+            myLogger.debug("Trying to acquire... My id:" + self.my_id + ".")
             # Jezeli mam token to:
             if self.got_token:
                 myLogger.debug("Already had token. My id:" + self.my_id + ".")
@@ -359,7 +359,6 @@ class DistributedMonitor():
                 # Zwracam współdzielony obiekt 
                 return self.shared_obj
             else:
-                myLogger.debug("Sending REQUEST for token. My id:" + self.my_id + ".")
                 # W przeciwnym razie aktualizuję o 1 wartość tablicy RNi odpowiadającą i
                 self.RNi[self.my_id]+=1
                 # Publikacja zaktualizowanej wartości tablicy RNi odpowiadającą i
@@ -367,9 +366,9 @@ class DistributedMonitor():
                 self.pub_REQUEST()
         # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
         # aż wątek odbierający komunikaty odbierze token
-        myLogger.debug("Waiting for token... My id:" + self.my_id + ".")
         # Blokujemy się w tym miejscu, aż w kolejce będziemy 
         # mieli gotowy obiekt współdzielony
+        myLogger.debug("Waiting for token... My id:" + self.my_id + ".")
         self.shared_obj = self.rcv_que.get(block=True)
         myLogger.debug("Got token. My id:" + self.my_id + ".")
         # Wchodzę do sekcji krytycznej
