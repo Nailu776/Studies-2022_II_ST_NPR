@@ -22,6 +22,7 @@ from contextlib import closing
 # implemented in Python.
 import socket
 # Pakowanie - picklowanie obiektu pythona do binarnych danych
+# https://docs.python.org/3/library/pickle.html
 import pickle
 
 
