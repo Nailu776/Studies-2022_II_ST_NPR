@@ -25,6 +25,7 @@ import socket
 # https://docs.python.org/3/library/pickle.html
 import pickle
 
+import time
 
 # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami
 # https://www.geeksforgeeks.org/suzuki-kasami-algorithm-for-mutual-exclusion-in-distributed-system/
@@ -116,7 +117,10 @@ class DistributedMonitor():
         self.RNi = {n: 0 for n in self.coworkers_list}
         self.LN = {n: 0 for n in self.coworkers_list}
         # Czy ten proces posiada token
-        self.got_token = is_token_acquired
+        if is_token_acquired == "1" :
+            self.got_token = True
+        else:
+            self.got_token = False
         # Czy ten proces wszedł do sekcji krytycznej
         self.in_cs = False
         # Zmienne współdzielone spakowane do obiektu
@@ -132,36 +136,70 @@ class DistributedMonitor():
         # Mozliwość wyłączenia pobocznego wątku odbierającego wiadomości:
         self.rcv_running = True
         self.start_zmq()
-    # Funkcja do odbierania wiadomości
-    def receiver_fun(self):
+    # Inicjalizacja publishera
+    def publisher_init(self):
+        # https://zguide.zeromq.org/docs/chapter5/
+        # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
+        # Utworzenie gniazda publikującego
+        # Publisher context
+        pub_ctx = zmq.Context()
+        # Publisher socket
+        self.pub_sock = pub_ctx.socket(zmq.PUB)
+        # Łączenie gniazda z my ID --> IP:PORT
+        self.pub_sock.bind("tcp://"+self.my_id)
+        '''  DO PRZETESTOWANIA 
+        https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
+        time.sleep(1) # new sleep statement
+        "Let's edit simple_pub to include a sleep statement, 
+        which is a simplified solution to this problem. 
+        This way, the asynchronous bind() should run to 
+        completion before the publishing of the message."
+        '''
+        # time.sleep(1)
+        # Inne rozwiązanie niż sleep:
+        pollerOUT = zmq.Poller()
+        pollerOUT.register(self.pub_sock, zmq.POLLOUT)
+        events_from_poll = pollerOUT.poll(timeout=1000)
+        myLogger.debug("ZMQ Publisher initiated. \n" + \
+            "\tEvents ready to be processed: \n\t" + str(events_from_poll))
+    # Inicjalizacja subskrybenta
+    def subscriber_init(self):
         # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
         # Subscriber context
         sub_ctx = zmq.Context()
         # Subscriber socket
-        sub_sock = sub_ctx.socket(zmq.SUB)
+        self.sub_sock = sub_ctx.socket(zmq.SUB)
         for coworker in self.coworkers_list:
             # Połącz się ze wszystkimi oprócz siebie
             if coworker is not self.my_id:
-                sub_sock.connect("tcp://"+coworker)
+                self.sub_sock.connect("tcp://"+coworker)
         # Subskrypcja wszystkiego
-        sub_sock.subscribe("")
+        self.sub_sock.subscribe("")
         # NOTE: BLOKUJĄCY SPOSOB
         # Odbiór wiadomości w formacie string 
         # sub_sock.recv_string()
         # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-2-2f63
-        poller = zmq.Poller()
+        self.pollerIN = zmq.Poller()   
         # Rejestracja gniazda w pollerze
-        poller.register(sub_sock, zmq.POLLIN)
+        self.pollerIN.register(self.sub_sock, zmq.POLLIN)
+        # events_from_poll = self.pollerIN.poll(timeout=2000) 
+        # myLogger.debug("ZMQ Subscriber initiated. \n" + \
+        #     "\tEvents ready to be processed: \n\t" + str(events_from_poll)) 
+        myLogger.debug("ZMQ Subscriber initiated.")    
+    # Funkcja do odbierania wiadomości
+    def receiver_fun(self):
         # Pętla działająca dopóki nie wyłączymy wątku odbiornika
         # ustawiając self.rcv_running na False
         while self.rcv_running:
             # "Poll the registered 0MQ or native fds for I/O."
             # timeout in ms
-            sockets_fds = dict(poller.poll(timeout=1000))
-            if sub_sock in sockets_fds:
+            sockets_fds = dict(self.pollerIN.poll(timeout=1000))
+            # myLogger.debug("Receiver polling events. \n" + \
+            # "\tEvents ready to be processed: \n\t" + str(sockets_fds))  
+            if self.sub_sock in sockets_fds:
                 with self.lock:
                     # Odebranie komunikatu (blokujemy się na tej metodzie)
-                    rcv_msg = sub_sock.recv()
+                    rcv_msg = self.sub_sock.recv()
                     # Odpakowanie komunikatu
                     unpickled_msg = pickle.loads(rcv_msg)
                     rcvfrom_id = unpickled_msg.rcvfrom
@@ -191,7 +229,7 @@ class DistributedMonitor():
         # Jeżeli self.rcv_running jest ustawione na False
         # i wyszliśmy z pętli while self.rcv_running
         # Zamykamy gniazdo subskrybenta
-        sub_sock.close()
+        self.sub_sock.close()
     # Czeka, aż współpracownik będzie możliwy do połączenia
     def wait_untill_connected(self, coworker):
         # Tymczasowy socket do sprawdzenia połączenia ze współpracownikiem
@@ -205,33 +243,11 @@ class DistributedMonitor():
             except ConnectionRefusedError:
                 self.wait_untill_connected(coworker)
             finally:
-                pass
-    # Uruchomienie mechanizmu ZMQ do publikacji tokenu oraz subskrypcji
-    def start_zmq(self):
-        myLogger.debug("Starting... ZMQ")
-        # https://zguide.zeromq.org/docs/chapter5/
-        # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
-        # Utworzenie gniazda publikującego
-        # Publisher context
-        pub_ctx = zmq.Context()
-        # Publisher socket
-        self.pub_sock = pub_ctx.socket(zmq.PUB)
-        # Łączenie gniazda z my ID --> IP:PORT
-        self.pub_sock.bind("tcp://"+self.my_id)
-        '''  DO PRZETESTOWANIA 
-        https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
-        time.sleep(1) # new sleep statement
-        "Let's edit simple_pub to include a sleep statement, 
-        which is a simplified solution to this problem. 
-        This way, the asynchronous bind() should run to 
-        completion before the publishing of the message."
-        '''
-        # time.sleep(1)
-        # Inne rozwiązanie niż sleep:
-        pollerOUT = zmq.Poller()
-        pollerOUT.register(self.pub_sock, zmq.POLLOUT)
-        dict(pollerOUT.poll(timeout=1000))
-        myLogger.debug("ZMQ Publisher initiated.")
+                if self.conn_logged == False:
+                    self.conn_logged = True
+                    myLogger.debug("Coworker: " + str(coworker) + " connected.")
+    # Oczekiwanie na wszystkich współpracowników
+    def waiting_for_coworkers(self):
         # Lista współpracowników (poza nami)
         coworkers = [
             coworker 
@@ -239,9 +255,13 @@ class DistributedMonitor():
                 if coworker != self.my_id
             ]
         # Oczekiwanie na wszystkich współpracowników (poza nami)
-        # Do włączenia się
+        # Do włączenia się do pracy
         for coworker in coworkers:
+            self.conn_logged = False
             self.wait_untill_connected(coworker)
+        myLogger.debug("All coworkers connected.")
+    # Uruchomienie wątku odbiornika
+    def start_receiver(self):
         # Wątek odbiornika komunikatów
         # https://www.pythontutorial.net/advanced-python/python-threading/
         rcv = threading.Thread(target=self.receiver_fun)
@@ -249,13 +269,26 @@ class DistributedMonitor():
         rcv.setDaemon = True
         # Uruchomienie wątku odbiornika komunikatów
         rcv.start()
+        myLogger.debug("Receiver thread started.")
+    # Uruchomienie mechanizmu ZMQ do publikacji tokenu oraz subskrypcji
+    def start_zmq(self):
+        myLogger.debug("Starting... ZMQ")
+        # Inicjalizacja publishera
+        self.publisher_init()
+        # Czekanie na wszystkich współpracowników do dołączenia do pracy
+        self.waiting_for_coworkers()
+        # Inicjalizacja subskrybenta
+        self.subscriber_init()
+        # Wystartowanie wątku odbierającego wiadomości
+        self.start_receiver()
+        myLogger.debug("ZMQ started.")
     # Zatrzymanie mechanizmu PUB-SUB ZMQ
     def stop_zmq(self):
         # Zamknięcie gniazda publikującego
         self.pub_sock.close()
         # Zakończenie wątku odbierającego komunikaty
         self.rcv_running = False
-        pass
+        myLogger.debug("ZMQ stopped.")
     # Wysłanie tokenu
     def send_token(self, receiver):
         myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")

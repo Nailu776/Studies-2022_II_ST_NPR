@@ -24,18 +24,18 @@ if __name__ == "__main__":
     # Handler zakończenia CTRL+C
     signal.signal(signal.SIGINT, signal_handler)
     # Produkuj liczby od 1 do 5
-    liczba = 1
+    liczba = 0
     while True:
         # Zdobądź dostęp do zasobu
         produkt = dMonitor.acquire()
         # Modyfikuj zasób
+        liczba +=1
         if not produkt:
             produkt = [liczba]
             myLogger.info("Produkuje produkt: " + str(produkt))
         else:
             produkt.append(liczba)
             myLogger.info("Produkuje produkt: " + str(produkt))
-        liczba +=1
         # Przetrzymaj przez chwilę zasób
         time.sleep(1)
         # Zwolnij zasób

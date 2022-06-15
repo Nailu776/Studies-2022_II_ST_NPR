@@ -23,6 +23,7 @@ if __name__ == "__main__":
     dMonitor = DistributedMonitor(sys.argv[2], sys.argv[1], sys.argv[2:])
     # Handler zakończenia CTRL+C
     signal.signal(signal.SIGINT, signal_handler)
+    i = 0
     while True:
         # Zdobądź dostęp do zasobu
         produkt = dMonitor.acquire()
@@ -31,8 +32,8 @@ if __name__ == "__main__":
             i = 0
             myLogger.info("Konsumuje produkt: " + str(produkt.pop(0)) + ".")
         else:
-            myLogger.info("Nie ma nic już " + i + " raz.")
             i+=1
+            myLogger.info("Nie ma nic już " + str(i) + " raz.")
         # Przetrzymaj przez chwilę zasób
         time.sleep(1)
         # Zwolnij zasób
