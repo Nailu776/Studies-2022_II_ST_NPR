@@ -12,6 +12,10 @@ import queue
 # "Thread module emulating a subset of Java's threading model."
 # https://docs.python.org/3/library/threading.html
 import threading
+# "Python bindings for 0MQ."
+# https://github.com/zeromq/pyzmq
+# pipenv install pyzmq
+import zmq
 
 
 # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami
@@ -88,9 +92,32 @@ class DistributedMonitor():
         pass
     # Uruchomienie mechanizmu ZMQ do publikacji tokenu oraz subskrypcji
     def start_zmq(self):
-        pass
-    # Zatrzymanie mechanizmu publikacji tokenu
+        myLogger.debug("Starting... ZMQ")
+        # https://zguide.zeromq.org/docs/chapter5/
+        # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
+        # Utworzenie gniazda publikującego
+        # Publisher context
+        pub_ctx = zmq.Context()
+        # Publisher socket
+        self.pub_sock = pub_ctx.socket(zmq.PUB)
+        # Łączenie gniazda z my ID --> IP:PORT
+        self.pub_sock.bind("tcp://"+self.my_id)
+        myLogger.debug("ZMQ Publisher initiated.")
+        # TODO: oczekiwanie na współpracowników
+        # TODO: funkcja odbiornika komunikatów
+        # Wątek odbiornika komunikatów
+        # https://www.pythontutorial.net/advanced-python/python-threading/
+        rcv = threading.Thread(target=self.receiver_fun)
+        # https://www.geeksforgeeks.org/python-daemon-threads/
+        rcv.setDaemon = True
+        # Uruchomienie wątku odbiornika komunikatów
+        rcv.start()
+    # Zatrzymanie mechanizmu PUB-SUB ZMQ
     def stop_zmq(self):
+        # Zamknięcie gniazda publikującego
+        self.pub_sock.close()
+        # Zakończenie wątku odbierającego komunikaty
+        self.rcv_running = False
         pass
     # Wysłanie tokenu
     def send_token(self, receiver):
@@ -154,3 +181,4 @@ class DistributedMonitor():
 if __name__ == "__main__":
     # Start
     myLogger.debug("Starting... main in Distr_Monit.py")
+    # DistributedMonitor(1,True,[1, 1]).start_zmq() # Debug ctx
