@@ -102,7 +102,32 @@ class DistributedMonitor():
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
     def acquire(self):
-        pass
+        myLogger.debug("Trying to acquire lock... My id:" + self.my_id)
+        # Acquire lock try sth and then finall release
+        with self.lock:
+            # Jezeli mam token to:
+            if self.got_token:
+                myLogger.debug("Got token. CS = True. My id:" + self.my_id)
+                # Wchodzę do sekcji krytycznej
+                self.in_cs = True
+                # Zwracam współdzielony obiekt 
+                return self.shared_obj
+            else:
+                myLogger.debug("Update RNi and wait for token. My id:" + self.my_id)
+                # w przeciwnym razie aktualizuję o 1 tablicę RN
+                self.RNi[self.my_id]+=1
+                # TODO: publikacja zaktualizowanej tablicy RN
+        # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
+        # aż wątek odbierający komunikaty odbierze token
+        # Blokujemy się w tym miejscu, aż w kolejce będziemy 
+        # mieli gotowy obiekt współdzielony
+        myLogger.debug("Waiting for token. My id:" + self.my_id)
+        self.shared_obj = self.rcv_que.get(block=True)
+        myLogger.debug("Got token. CS = True. My id:" + self.my_id)
+        # Wchodzę do sekcji krytycznej
+        self.in_cs = True
+        # Zwracam współdzielony obiekt 
+        return self.shared_obj
 
 
 # Funkcja main do debugowania.
