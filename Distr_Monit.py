@@ -151,7 +151,33 @@ class DistributedMonitor():
             sockets_fds = dict(poller.poll(timeout=1000))
             if sub_sock in sockets_fds:
                 with self.lock:
-                    # TODO: obsługa otrzymanych komunikatów
+                    # Odebranie komunikatu (blokujemy się na tej metodzie)
+                    rcv_msg = sub_sock.recv()
+                    # Odpakowanie komunikatu
+                    unpickled_msg = pickle.loads(rcv_msg)
+                    rcvfrom_id = unpickled_msg.rcvfrom
+                    myLogger.debug("Received msg from: " + rcvfrom_id)
+                    # Jeżeli pole rni nie jest niczym - dostaliśmy prośbę o token
+                    if unpickled_msg.rni is not None:
+                        # Aktualizujemy pole rni odpowiedniego procesu
+                        self.RNi[rcvfrom_id] = \
+                            max(self.RNi[rcvfrom_id], unpickled_msg.rni)
+                        # Posiadając token 
+                        if self.got_token == True:
+                            # Jeżeli nie jesteśmy w sekcji krytycznej
+                            if self.in_cs == False:
+                                # Jeżeli to jest nowe żądanie (RNi[j]==LN[j]+1)
+                                if self.RNi[rcvfrom_id] == (self.LN[rcvfrom_id] + 1):
+                                    # Wysyłamy token
+                                    self.send_token(receiver=rcvfrom_id)
+                    # W przeciwnym wypadku chodzi o token
+                    # jeżeli do nas szła wiadomość to przyjmujemy token
+                    elif unpickled_msg.sendto == self.my_id:
+                        myLogger.debug("Received token from: "+ rcvfrom_id)
+                        self.Q = unpickled_msg.Q
+                        self.LN = unpickled_msg.LN
+                        self.rcv_que.put(unpickled_msg.SD)
+                        self.got_token = True
                     pass
         # Jeżeli self.rcv_running jest ustawione na False
         # i wyszliśmy z pętli while self.rcv_running
