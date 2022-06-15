@@ -270,7 +270,6 @@ class DistributedMonitor():
     # Zwolnienie dostępu do zasobu (współdzielonego obiektu danych)
     # funkcja nic nie zwraca - odsyła token 
     def release(self, shared_data_obj):
-        myLogger.debug("Trying to acquire lock for release... My id:" + self.my_id + ".")
         # Acquire lock try sth and then finall release
         with self.lock:
             myLogger.debug("Trying to release. My id:" + self.my_id + ".")
@@ -306,7 +305,7 @@ class DistributedMonitor():
             # Wychodzę z sekcji krytycznej
             self.in_cs = False
             myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
-    # Publikacja zaktualizowanej swojej wartości w tablicy RNi
+    # Publikacja zaktualizowanej swojej wartości w tablicy RNi wysyłając żądanie tokenu
     def pub_REQUEST(self):
         myLogger.debug("Publishing my RNi[i]. My id: " + self.my_id + ".")
         # Tworzenie komunikatu
@@ -316,18 +315,18 @@ class DistributedMonitor():
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
     def acquire(self):
-        myLogger.debug("Trying to acquire lock for acquire... My id:" + self.my_id + ".")
+        myLogger.debug("Trying to acquire... My id:" + self.my_id + ".")
         # Acquire lock try sth and then finall release
         with self.lock:
             # Jezeli mam token to:
             if self.got_token:
-                myLogger.debug("Got token. CS = True. My id:" + self.my_id + ".")
+                myLogger.debug("Already had token. My id:" + self.my_id + ".")
                 # Wchodzę do sekcji krytycznej
                 self.in_cs = True
                 # Zwracam współdzielony obiekt 
                 return self.shared_obj
             else:
-                myLogger.debug("Update RNi and wait for token. My id:" + self.my_id + ".")
+                myLogger.debug("Sending REQUEST for token. My id:" + self.my_id + ".")
                 # W przeciwnym razie aktualizuję o 1 wartość tablicy RNi odpowiadającą i
                 self.RNi[self.my_id]+=1
                 # Publikacja zaktualizowanej wartości tablicy RNi odpowiadającą i
@@ -335,11 +334,11 @@ class DistributedMonitor():
                 self.pub_REQUEST()
         # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
         # aż wątek odbierający komunikaty odbierze token
+        myLogger.debug("Waiting for token... My id:" + self.my_id + ".")
         # Blokujemy się w tym miejscu, aż w kolejce będziemy 
         # mieli gotowy obiekt współdzielony
-        myLogger.debug("Waiting for token. My id:" + self.my_id + ".")
         self.shared_obj = self.rcv_que.get(block=True)
-        myLogger.debug("Got token. CS = True. My id:" + self.my_id + ".")
+        myLogger.debug("Got token. My id:" + self.my_id + ".")
         # Wchodzę do sekcji krytycznej
         self.in_cs = True
         # Zwracam współdzielony obiekt 
