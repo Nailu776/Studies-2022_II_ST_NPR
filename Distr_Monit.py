@@ -21,7 +21,8 @@ from contextlib import closing
 # Wrapper module for _socket, providing some additional facilities
 # implemented in Python.
 import socket
-
+# Pakowanie - picklowanie obiektu pythona do binarnych danych
+import pickle
 
 
 # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami
@@ -41,15 +42,40 @@ import socket
 #       - wysłanie tokenu pierwszemu procesowi z kolejki Q
 # Implementacja tokenu:
 # Funkcja do konwersji obiektu
-def conv_obj():
+def conv_obj(Qsize, Q, LNsize, LN, SDsize, SD, to_token=True):
     pass
 # Funkcja do konwersji tokenu 
 def conv_token():
     pass
-# Przesyłany wymieniany token
-class ExchangeToken():
-    pass
-
+# Przesyłany obiekt wymiany - token albo aktualizacja RNi
+class ExchangeTokenOrRNi():
+    # Przesyłanie tokenu --> token_or_rni == True, 
+    # a przesyłanie rni --> token_or_rni == False
+    def __init__(self, Qsize, Q, LNsize, LN, SDsize, SD, rcvfrom, sendto, rni=None):
+        # Kto wysyła wiadomość - od kogo ją odbierzemy
+        self.rcvfrom = rcvfrom 
+        # Czy wysyłamy RNi[i]
+        if rni is not None:
+            self.rni = rni
+            self.Qsize = None
+            self.Q = None
+            self.LNsize = None
+            self.LN = None
+            self.SDsize = None
+            self.SD = None
+            self.sendto = None # ALL
+        # Czy wysyłamy token w przeciwnym wypadku
+        else:
+            self.Qsize = Qsize
+            self.Q = Q
+            self.LNsize = LNsize
+            self.LN = LN
+            self.SDsize = SDsize
+            self.SD = SD
+            # Wyspecyfikowanego współpracownika
+            self.sendto = sendto 
+            self.rni = None
+            
 
 # Monitor rozproszony
 # Wykorzystujący do komunikacji PUB-SUB zmq
@@ -186,9 +212,14 @@ class DistributedMonitor():
     # Wysłanie tokenu
     def send_token(self, receiver):
         myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")
-        # TODO: wysłanie tokenu kolejnemu współpracownikowi
-        # Utworzenie tokenu - konwersja Q LN Obj do Tokenu
-        # self.publisher. send (token)
+        # Tworzenie komunikatu
+        snd_msg = ExchangeTokenOrRNi(rcvfrom=self.my_id, 
+            Qsize=self.Q.__sizeof__, Q=self.Q, 
+            LNsize=self.LN.__sizeof__, LN=self.LN, 
+            SDsize=self.shared_obj.__sizeof__, SD=self.shared_obj,
+            sendto=receiver)
+        # Wysyłanie spakowanego komunikatu
+        self.pub_sock.send(pickle.dumps(snd_msg))
     # Zwolnienie dostępu do zasobu (współdzielonego obiektu danych)
     # funkcja nic nie zwraca - odsyła token 
     def release(self, shared_data_obj):
@@ -229,9 +260,12 @@ class DistributedMonitor():
             self.in_cs = False
             myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
     # Publikacja zaktualizowanej swojej wartości w tablicy RNi
-    def pub_REQUEST(self, new_RNi_i):
+    def pub_REQUEST(self):
         myLogger.debug("Publishing my RNi[i]. My id: " + self.my_id + ".")
-        # TODO: publikacja zaktualizowanej tablicy RN
+        # Tworzenie komunikatu
+        snd_msg = ExchangeTokenOrRNi(rcvfrom=self.my_id, rni=self.RNi[self.my_id])
+        # Wysyłanie spakowanego komunikatu
+        self.pub_sock.send(pickle.dumps(snd_msg))
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
     def acquire(self):
@@ -251,7 +285,7 @@ class DistributedMonitor():
                 self.RNi[self.my_id]+=1
                 # Publikacja zaktualizowanej wartości tablicy RNi odpowiadającą i
                 # Wysyłając żądanie(i, sn) - sn to zaktualizowana wartość RNi[i]
-                self.pub_REQUEST(self.RNi[self.my_id])
+                self.pub_REQUEST()
         # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
         # aż wątek odbierający komunikaty odbierze token
         # Blokujemy się w tym miejscu, aż w kolejce będziemy 
