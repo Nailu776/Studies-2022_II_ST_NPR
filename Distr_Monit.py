@@ -52,9 +52,10 @@ def conv_token():
 class ExchangeTokenOrRNi():
     # Przesyłanie tokenu --> token_or_rni == True, 
     # a przesyłanie rni --> token_or_rni == False
-    def __init__(self, Qsize, Q, LNsize, LN, SDsize, SD, rcvfrom, sendto, rni=None):
+    def __init__(self, rcvfrom, Qsize=None, Q=None, LNsize=None, LN=None, 
+        SDsize=None, SD=None, sendto=None, rni=None):
         # Kto wysyła wiadomość - od kogo ją odbierzemy
-        self.rcvfrom = rcvfrom 
+        self.rcvfrom = rcvfrom
         # Czy wysyłamy RNi[i]
         if rni is not None:
             self.rni = rni
@@ -81,6 +82,11 @@ class ExchangeTokenOrRNi():
 # Monitor rozproszony
 # Wykorzystujący do komunikacji PUB-SUB zmq
 class DistributedMonitor():
+    def end_work(self):
+        myLogger.debug("Adios. My id: " + self.my_id + ".")
+        # NOTE: PROBLEM ZGUBIONEGO TOKENU
+        # Zatrzymanie komunikacji
+        self.stop_zmq()
     # Init monitora rozproszonego
     def __init__(self, id_ip_port, is_token_acquired, coworkers):
         # Zmienne algorytmu wzajemnego wykluczania Suzuki-Kasami
@@ -125,6 +131,7 @@ class DistributedMonitor():
         self.lock = threading.Lock()
         # Mozliwość wyłączenia pobocznego wątku odbierającego wiadomości:
         self.rcv_running = True
+        self.start_zmq()
     # Funkcja do odbierania wiadomości
     def receiver_fun(self):
         # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
@@ -133,7 +140,9 @@ class DistributedMonitor():
         # Subscriber socket
         sub_sock = sub_ctx.socket(zmq.SUB)
         for coworker in self.coworkers_list:
-            sub_sock.connect("tcp://"+coworker)
+            # Połącz się ze wszystkimi oprócz siebie
+            if coworker is not self.my_id:
+                sub_sock.connect("tcp://"+coworker)
         # Subskrypcja wszystkiego
         sub_sock.subscribe("")
         # NOTE: BLOKUJĄCY SPOSOB
@@ -191,7 +200,12 @@ class DistributedMonitor():
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tmp_sock:
             # https://docs.python.org/3/library/socket.html
             # Connect - waits until the connection completes
-            tmp_sock.connect((coworker_IP, int(coworker_PORT)))
+            try:
+                tmp_sock.connect((coworker_IP, int(coworker_PORT)))
+            except ConnectionRefusedError:
+                self.wait_untill_connected(coworker)
+            finally:
+                pass
     # Uruchomienie mechanizmu ZMQ do publikacji tokenu oraz subskrypcji
     def start_zmq(self):
         myLogger.debug("Starting... ZMQ")
@@ -204,13 +218,19 @@ class DistributedMonitor():
         self.pub_sock = pub_ctx.socket(zmq.PUB)
         # Łączenie gniazda z my ID --> IP:PORT
         self.pub_sock.bind("tcp://"+self.my_id)
-        ''' TODO: DO PRZETESTOWANIA 
+        '''  DO PRZETESTOWANIA 
+        https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
         time.sleep(1) # new sleep statement
         "Let's edit simple_pub to include a sleep statement, 
         which is a simplified solution to this problem. 
         This way, the asynchronous bind() should run to 
         completion before the publishing of the message."
         '''
+        # time.sleep(1)
+        # Inne rozwiązanie niż sleep:
+        pollerOUT = zmq.Poller()
+        pollerOUT.register(self.pub_sock, zmq.POLLOUT)
+        dict(pollerOUT.poll(timeout=1000))
         myLogger.debug("ZMQ Publisher initiated.")
         # Lista współpracowników (poza nami)
         coworkers = [
