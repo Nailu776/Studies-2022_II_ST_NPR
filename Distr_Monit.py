@@ -65,7 +65,7 @@ class DistributedMonitor():
         # identyfikatory pozostałych pracowników
         self.coworkers_list = coworkers
         # Init wyżej wymienionych tablic N 
-        self.RN = {n: 0 for n in self.coworkers_list}
+        self.RNi = {n: 0 for n in self.coworkers_list}
         self.LN = {n: 0 for n in self.coworkers_list}
         # Czy ten proces posiada token
         self.got_token = is_token_acquired
@@ -98,11 +98,31 @@ class DistributedMonitor():
     # Zwolnienie dostępu do zasobu (współdzielonego obiektu danych)
     # funkcja nic nie zwraca - odsyła token 
     def release(self, shared_data_obj):
-        pass
+        myLogger.debug("Trying to acquire lock for release... My id:" + self.my_id)
+        # Acquire lock try sth and then finall release
+        with self.lock:
+            myLogger.debug("Trying to release. My id:" + self.my_id)
+            # Aktualizuję współdzielony obiekt 
+            self.shared_obj = shared_data_obj
+            # Po wykonaniu sekcji krytycznej:
+            # Aktualizuję tablicę LN wartością RNi[i]
+            self.LN[self.my_id] = self.RNi[self.my_id]
+            # ~ AR ćw :
+            # Dla każdego procesu Pj, którego Id nie ma
+            # w kolejce żetonu (Q), dołącza jego Id do Q 
+            # pod warunkiem: RNi[j] = LN[j]+1 (było nowe żądanie) 
+            # TODO: Aktualizacja kolejki Q
+            # ~ AR ćw:
+            # Jeżeli Q nie jest pusta, to usuwamy pierwszy Id z niej
+            # i wysyłamy do tego procesu token
+            # TODO: Wysyłanie do pierwszego Id jezeli Q niepuste
+            # Wychodzę z sekcji krytycznej
+            self.in_cs = False
+            myLogger.debug("Exited Critical Section. My id:" + self.my_id)
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
     def acquire(self):
-        myLogger.debug("Trying to acquire lock... My id:" + self.my_id)
+        myLogger.debug("Trying to acquire lock for acquire... My id:" + self.my_id)
         # Acquire lock try sth and then finall release
         with self.lock:
             # Jezeli mam token to:
@@ -114,7 +134,7 @@ class DistributedMonitor():
                 return self.shared_obj
             else:
                 myLogger.debug("Update RNi and wait for token. My id:" + self.my_id)
-                # w przeciwnym razie aktualizuję o 1 tablicę RN
+                # W przeciwnym razie aktualizuję o 1 tablicę RN
                 self.RNi[self.my_id]+=1
                 # TODO: publikacja zaktualizowanej tablicy RN
         # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
