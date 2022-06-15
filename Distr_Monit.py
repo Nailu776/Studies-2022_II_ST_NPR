@@ -34,6 +34,11 @@ import socket
 # gdzie rozmiar ma ustaloną wielkość 32 bitów i oznacza rozmiar obiektu w nawiasach ()
 
 
+# KOMUNIKATY:
+#   REQUEST: 
+#       - wysłanie swojego ID oraz swojej wartości RNi[i]
+#   TOKEN:
+#       - wysłanie tokenu pierwszemu procesowi z kolejki Q
 # Implementacja tokenu:
 # Funkcja do konwersji obiektu
 def conv_obj():
@@ -224,7 +229,7 @@ class DistributedMonitor():
             self.in_cs = False
             myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
     # Publikacja zaktualizowanej swojej wartości w tablicy RNi
-    def pub_RNi(self, new_RNi_i):
+    def pub_REQUEST(self, new_RNi_i):
         myLogger.debug("Publishing my RNi[i]. My id: " + self.my_id + ".")
         # TODO: publikacja zaktualizowanej tablicy RN
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
@@ -242,10 +247,11 @@ class DistributedMonitor():
                 return self.shared_obj
             else:
                 myLogger.debug("Update RNi and wait for token. My id:" + self.my_id + ".")
-                # W przeciwnym razie aktualizuję o 1 tablicę RN
+                # W przeciwnym razie aktualizuję o 1 wartość tablicy RNi odpowiadającą i
                 self.RNi[self.my_id]+=1
-                # Publikacja zaktualizowanej tablicy RN
-                self.pub_RNi(self.RNi[self.my_id])
+                # Publikacja zaktualizowanej wartości tablicy RNi odpowiadającą i
+                # Wysyłając żądanie(i, sn) - sn to zaktualizowana wartość RNi[i]
+                self.pub_REQUEST(self.RNi[self.my_id])
         # Jeżeli nie otrzymaliśmy obiektu to czekamy, 
         # aż wątek odbierający komunikaty odbierze token
         # Blokujemy się w tym miejscu, aż w kolejce będziemy 
