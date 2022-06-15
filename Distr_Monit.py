@@ -16,6 +16,12 @@ import threading
 # https://github.com/zeromq/pyzmq
 # pipenv install pyzmq
 import zmq
+# "Context to automatically close something at the end of a block."
+from contextlib import closing
+# Wrapper module for _socket, providing some additional facilities
+# implemented in Python.
+import socket
+
 
 
 # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami
@@ -66,7 +72,7 @@ class DistributedMonitor():
         # Identyfikator danego pracownika (swój - adr IP + Port)
         self.my_id = id_ip_port
         # Lista współpracowników przy danych współdzielonych
-        # identyfikatory pozostałych pracowników
+        # identyfikatory wszystkich pracowników
         self.coworkers_list = coworkers
         # Init wyżej wymienionych tablic N 
         self.RNi = {n: 0 for n in self.coworkers_list}
@@ -89,7 +95,45 @@ class DistributedMonitor():
         self.rcv_running = True
     # Funkcja do odbierania wiadomości
     def receiver_fun(self):
-        pass
+        # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
+        # Subscriber context
+        sub_ctx = zmq.Context()
+        # Subscriber socket
+        sub_sock = sub_ctx.socket(zmq.SUB)
+        for coworker in self.coworkers_list:
+            sub_sock.connect("tcp://"+coworker)
+        # Subskrypcja wszystkiego
+        sub_sock.subscribe("")
+        # NOTE: BLOKUJĄCY SPOSOB
+        # Odbiór wiadomości w formacie string 
+        # sub_sock.recv_string()
+        # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-2-2f63
+        poller = zmq.Poller()
+        # Rejestracja gniazda w pollerze
+        poller.register(sub_sock, zmq.POLLIN)
+        # Pętla działająca dopóki nie wyłączymy wątku odbiornika
+        # ustawiając self.rcv_running na False
+        while self.rcv_running:
+            # "Poll the registered 0MQ or native fds for I/O."
+            # timeout in ms
+            sockets_fds = dict(poller.poll(timeout=1000))
+            if sub_sock in sockets_fds:
+                with self.lock:
+                    # TODO: obsługa otrzymanych komunikatów
+                    pass
+        # Jeżeli self.rcv_running jest ustawione na False
+        # i wyszliśmy z pętli while self.rcv_running
+        # Zamykamy gniazdo subskrybenta
+        sub_sock.close()
+    # Czeka, aż współpracownik będzie możliwy do połączenia
+    def wait_untill_connected(self, coworker):
+        # Tymczasowy socket do sprawdzenia połączenia ze współpracownikiem
+        # "Context to automatically close something at the end of a block."
+        coworker_IP, coworker_PORT = coworker.split(":")
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tmp_sock:
+            # https://docs.python.org/3/library/socket.html
+            # Connect - waits until the connection completes
+            tmp_sock.connect((coworker_IP, int(coworker_PORT)))
     # Uruchomienie mechanizmu ZMQ do publikacji tokenu oraz subskrypcji
     def start_zmq(self):
         myLogger.debug("Starting... ZMQ")
@@ -102,9 +146,24 @@ class DistributedMonitor():
         self.pub_sock = pub_ctx.socket(zmq.PUB)
         # Łączenie gniazda z my ID --> IP:PORT
         self.pub_sock.bind("tcp://"+self.my_id)
+        ''' TODO: DO PRZETESTOWANIA 
+        time.sleep(1) # new sleep statement
+        "Let's edit simple_pub to include a sleep statement, 
+        which is a simplified solution to this problem. 
+        This way, the asynchronous bind() should run to 
+        completion before the publishing of the message."
+        '''
         myLogger.debug("ZMQ Publisher initiated.")
-        # TODO: oczekiwanie na współpracowników
-        # TODO: funkcja odbiornika komunikatów
+        # Lista współpracowników (poza nami)
+        coworkers = [
+            coworker 
+            for coworker in self.coworkers_list 
+                if coworker != self.my_id
+            ]
+        # Oczekiwanie na wszystkich współpracowników (poza nami)
+        # Do włączenia się
+        for coworker in coworkers:
+            self.wait_untill_connected(coworker)
         # Wątek odbiornika komunikatów
         # https://www.pythontutorial.net/advanced-python/python-threading/
         rcv = threading.Thread(target=self.receiver_fun)
@@ -164,6 +223,7 @@ class DistributedMonitor():
             # Wychodzę z sekcji krytycznej
             self.in_cs = False
             myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
+    # Publikacja zaktualizowanej swojej wartości w tablicy RNi
     def pub_RNi(self, new_RNi_i):
         myLogger.debug("Publishing my RNi[i]. My id: " + self.my_id + ".")
         # TODO: publikacja zaktualizowanej tablicy RN
@@ -203,4 +263,3 @@ class DistributedMonitor():
 if __name__ == "__main__":
     # Start
     myLogger.debug("Starting... main in Distr_Monit.py.")
-    # DistributedMonitor(1,True,[1, 1]).start_zmq() # Debug ctx
