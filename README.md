@@ -2,6 +2,12 @@
 Repozytorium przeznaczone na przedmiot Narzędzia Przetwarzania Rozproszonego (NPR) na drugim stopniu studiów.
 
 ## 1. Implementacja rozproszonego monitora w ØMQ
+### 1.0 Wymagania
+ - Python
+ - PyZmq 
+ ```
+ $ pipenv install pyzmq
+ ```
 ### 1.1 Krótki opis implementacji
 W skład implementacji (znajdującej się w pliku *Distr_Monit.py*) wchodzą dwa obiekty:  
  - ExchangeMsg() --> Komunikat wymiany, który służy do tworzenia wiadomości,  
@@ -58,10 +64,9 @@ class DistributedMonitor():
         init_shared_data # początkowa wartość/obiekt zmiennej współdzielonej  
         )
 ```
-Po utworzeniu obiektu monitora rozproszonego "myDistributedMonitor" rozpoczyna się próba podłączenia  
-do systemu rozproszonego.    
-Inicjowane jest gniazdo publikujące oraz subskrybujące, a także oczekiwanie    
-na podłączenie się wszystkich współpracowników do systemu i połączenie do nich gniazda subskrybenta.    
+Po utworzeniu obiektu monitora rozproszonego "myDistributedMonitor" rozpoczyna się próba podłączenia 
+do systemu rozproszonego. Inicjowane jest gniazdo publikujące oraz subskrybujące, a także oczekiwanie 
+na podłączenie się wszystkich współpracowników do systemu i połączenie do nich gniazda subskrybenta. 
 W wątku demonicznym działającym w tle odbierane i przetwarzane są komunikaty (opisane w pkt. 1.2.).  
 #### 1.3.2 Funkcje użytkowe
 ```python
