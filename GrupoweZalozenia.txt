@@ -22,3 +22,45 @@ def conv_obj(Qsize, Q, LNsize, LN, SDsize, SD, to_token=True):
 # Funkcja do konwersji tokenu 
 def conv_token():
     pass
+
+
+# # Do spójności rozwiązania z rozwiązaniami kolegów:
+# # TODO: Wspólne komunikaty (z resztą grupy) do testowania między językami!
+# # Przesyłana wiadomość - token albo aktualizacja RNi
+# class ExchangeMsg():
+#     # Przesyłanie tokenu --> rni is None, 
+#     # a przesyłanie RNi[i] --> rni is not None
+#     def __init__(self, rcvfrom, Qsize=None, Q=None, LNsize=None, LN=None, 
+#         SDsize=None, SD=None, sendto=None, rni=None):
+#         # Kto wysyła wiadomość - od kogo ją odbierzemy
+#         self.rcvfrom = rcvfrom
+#         # Czy wysyłamy RNi[i]
+#         if rni is not None:
+#             self.rni = rni
+#             self.Qsize = None
+#             self.Q = None
+#             self.LNsize = None
+#             self.LN = None
+#             self.SDsize = None
+#             self.SD = None
+#             self.sendto = None # ALL
+#         # Czy wysyłamy token w przeciwnym wypadku
+#         else: # If rni is None
+#             self.Qsize = Qsize
+#             self.Q = Q
+#             self.LNsize = LNsize
+#             self.LN = LN
+#             self.SDsize = SDsize
+#             self.SD = SD
+#             # Wyspecyfikowanego współpracownika
+#             self.sendto = sendto 
+#             self.rni = None
+W funkcji send_token:
+
+        # TODO: Wspólne komunikaty (z resztą grupy) do testowania między językami!
+        # snd_msg = ExchangeMsg(rcvfrom=self.my_id, 
+        #     Qsize=self.Q.__sizeof__, Q=self.Q, 
+        #     LNsize=self.LN.__sizeof__, LN=self.LN, 
+        #     SDsize=self.shared_obj.__sizeof__, SD=self.shared_obj,
+        #     sendto=receiver)
+        # Tworzenie komunikatu    
