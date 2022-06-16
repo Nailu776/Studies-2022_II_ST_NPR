@@ -45,8 +45,9 @@ class ExchangeMsg():
         self.sendto = sendto  
         
 
-# Monitor rozproszony
-# Wykorzystujący do komunikacji mechanizm ZMQ PUB-SUB 
+# Monitor rozproszony wykorzystujący:
+# Do komunikacji - mechanizm ZMQ PUB-SUB
+# Do wzajemnego wykluczania - algorytm suzuki-kasami 
 class DistributedMonitor():
     # Init monitora rozproszonego
     def __init__(self, id_ip_port, is_token_acquired, coworkers, init_shared_data):
@@ -425,8 +426,9 @@ class DistributedMonitor():
         # Wysyłanie spakowanego komunikatu
         myLogger.debug("Sending Sleep.")
         self.pub_sock.send(sending_wake_me_msg)
-    # Jezeli z jakiś powodów nie chcę teraz przetwarzać zmiennej współdzielonej
-    # to idę spać i informuję o tym resztę (np pusty bufor)
+    # Jeżeli z jakiś powodów proces nie może teraz przetwarzać zmiennej współdzielonej
+    # (np. odebraną zmienną jest bufor, który jest pusty i nie można z niego nic pobrać)
+    # to proces zasypia i informuje o tym resztę współpracowników (procesów)
     def going_sleep(self, shared_data_obj):
         # Próbuję oddać token (wychodzę z sekcji krytycznej)
         myLogger.debug("Release before sleep.")
@@ -437,8 +439,8 @@ class DistributedMonitor():
             self.am_i_sleeping = True
         # Zatrzymuję się, aż do wiadomości wakeup w wątku pobocznym odbiornika
         return self.wake_up_call.get(block=True)
-    # Jeżeli z jakiś powodów chcemy kogoś obudzić bo np dodaliśmy coś do bufora
-    # To wykorzystamy wakeup - żeby wybudzić pierwszą znaną nam śpiocha
+    # Jeżeli z jakiś powodów proces chce kogoś obudzić (np. dodał coś do współdzielonego bufora)
+    # to proces wysyła komunikat budzenia jednego procesu, żeby wybudzić pierwszy znany mu śpiacy proces
     def wake_up(self):
         with self.lock:
             # Tworzenie komunikatu wakeup zawierającego tylko sendto
@@ -452,7 +454,8 @@ class DistributedMonitor():
                 self.pub_sock.send(sending_wake_up_msg)
             else:
                 myLogger.debug("As far as I know... nobody is sleeping.")
-    # Podobnie jak wakeup - tylko wysyłamy do None - czyli wszystkich
+    # Podobnie jak metoda wake_up() z tą różnicą, że komunikat jest wysyłany do wszystkich,
+    # aby każdy proces, który aktualnie "śpi" został wybudzony
     def wake_up_all(self):
         with self.lock:
             # Tylko jeżeli ktoś śpi
@@ -467,15 +470,19 @@ class DistributedMonitor():
                 self.pub_sock.send(sending_wake_up_all_msg)
             else:
                 myLogger.debug("As far as I know... nobody is sleeping.")
-    # NOTE: WRAPPER na funkcje sleep i wake up, 
-    # aby ich nazwy były bardziej intuicyjne:
-    # Going sleep umożliwia edycję zmiennej w przeciwieństwie do wait
+    # Opakowanie (z ang. wrapper) na funkcje: going_sleep(), wake_up() oraz wake_up_all(), 
+    # aby ich nazwy były bardziej intuicyjne (dla innych programistów):
+    # NOTE: metoda going_sleep() umożliwia edycję zmiennej w przeciwieństwie do wait()
+    # w metodzie wait() oddawana zmienna współdzielona będzie niezmieniona
+    # Odpowiednik going_sleep()
     def wait(self):
         # Ignoruje jakiekolwiek zmiany w obiekcie współdzielonym
         # Oddajemy do systemu obiekt, który dostaliśmy
         self.going_sleep(self.shared_obj)
+    # Odpowiednik wake_up()
     def notify(self):
         self.wake_up()
+    # Odpowiednik wake_up_all()
     def notifyAll(self):
         self.wake_up_all()
 
