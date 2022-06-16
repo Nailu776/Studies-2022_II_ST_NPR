@@ -17,17 +17,22 @@ from contextlib import closing
 # "Wrapper module for _socket, providing some additional facilities
 # implemented in Python." [5]
 import socket
+# Sys dla sprawdzania wielości obiektów - wiadomości przy debugowaniu komunikatów
+# import sys
 # Pakowanie - picklowanie obiektu pythona do binarnych danych [6] 
 import pickle
-# Sys dla sprawdzania wielości obiektu - wiadomości przy debugowaniu komunikatów
-# import sys
 
 
-# Do osobnego oddawania:
-# Przesyłana wiadomość - token albo aktualizacja RNi
+# Przesyłana wiadomość - token albo aktualizacja RNi lub sleep/wake
 class ExchangeMsg():
     def __init__(self, rcvfrom, Q=None, LN=None, 
         SD=None, sendto=None, rni=None):
+        # NOTE: Jeżeli przyszła do nas wiadomość
+        # W przypadku 1: jeżeli rcvfrom is None - to jest to wiadomość wake up
+        # W przypadku 1.1: jeżeli jest sendto == None to wszyscy są budzeni, a jeżeli jest sprecyzowany to ktoś konkretny
+        # W przypadku 2: Jeżeli rcvfrom jest sprecyzowane oraz rni jest sprecyzowane - to aktualizacja rni
+        # W przypadku 3: Jeżeli rcvfrom jest, rni nie, a sendto jest - to przesyłany jest token 
+        # W przypadku 4: Jeżeli rcvfrom jest, rni nie, a sendto nie - to jest to wiadomość idę spać sleep
         # Kto wysyła wiadomość - od kogo ją odbierzemy
         self.rcvfrom = rcvfrom
         # rni == None --> wysyłamy token, a nie REQUEST
@@ -38,52 +43,17 @@ class ExchangeMsg():
         self.SD = SD
         # sendto == None --> do wszystkich
         self.sendto = sendto  
-# # Do spójności rozwiązania z rozwiązaniami kolegów:
-# # TODO: Wspólne komunikaty (z resztą grupy) do testowania między językami!
-# # Przesyłana wiadomość - token albo aktualizacja RNi
-# class ExchangeMsg():
-#     # Przesyłanie tokenu --> rni is None, 
-#     # a przesyłanie RNi[i] --> rni is not None
-#     def __init__(self, rcvfrom, Qsize=None, Q=None, LNsize=None, LN=None, 
-#         SDsize=None, SD=None, sendto=None, rni=None):
-#         # Kto wysyła wiadomość - od kogo ją odbierzemy
-#         self.rcvfrom = rcvfrom
-#         # Czy wysyłamy RNi[i]
-#         if rni is not None:
-#             self.rni = rni
-#             self.Qsize = None
-#             self.Q = None
-#             self.LNsize = None
-#             self.LN = None
-#             self.SDsize = None
-#             self.SD = None
-#             self.sendto = None # ALL
-#         # Czy wysyłamy token w przeciwnym wypadku
-#         else: # If rni is None
-#             self.Qsize = Qsize
-#             self.Q = Q
-#             self.LNsize = LNsize
-#             self.LN = LN
-#             self.SDsize = SDsize
-#             self.SD = SD
-#             # Wyspecyfikowanego współpracownika
-#             self.sendto = sendto 
-#             self.rni = None
         
 
 # Monitor rozproszony
-# Wykorzystujący do komunikacji PUB-SUB zmq
+# Wykorzystujący do komunikacji mechanizm ZMQ PUB-SUB 
 class DistributedMonitor():
-    def end_work(self):
-        # NOTE: PROBLEM ZGUBIONEGO TOKENU Kiedy ktoś się niespodziewanie rozłączy
-        myLogger.debug("Adios. My id: " + self.my_id + ".")
-        # Zatrzymanie komunikacji
-        self.stop_zmq()
     # Init monitora rozproszonego
     def __init__(self, id_ip_port, is_token_acquired, coworkers):
+        # Zmiana nazwy loggera na identyfikator 
+        myLogger.name = "ID: " + id_ip_port
         # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami [0]
-        # Zmienne algorytmu wzajemnego wykluczania Suzuki-Kasami
-        # Na podstawie AR ćw4 wzajemne wykluczanie (~AR_ćw)
+        # (~AR_ćw)
         # RNi[1..N] tablica RN przechowywana przez proces Pi;
         # RNi[j] oznacza największą liczbę porządkową otrzymaną
         # w żądaniu od procesu Pj
@@ -129,8 +99,21 @@ class DistributedMonitor():
         self.lock = threading.Lock()
         # Mozliwość wyłączenia pobocznego wątku odbierającego wiadomości:
         self.rcv_running = True
+        # NOTE: Rozszerzenie mechanizmu release i acquire  
+        # o  sleep i wakeupOne / wakeupAll
+        self.sleeping_list = []
+        self.am_i_sleeping = False
+        # Wykorzystanie blokowania Get, i ustawiania Put w wątku w tle do budzenia
+        self.wake_up_call = queue.Queue(1)
         # Init komunikacji ZMQ
         self.start_zmq()
+    # Koniec pracy przy współdzielonej zmiennej
+    def end_work(self):
+        # NOTE: PROBLEM ZGUBIONEGO TOKENU 
+        # Kiedy ktoś się niespodziewanie rozłączy
+        myLogger.debug("Adios.")
+        # Zatrzymanie komunikacji
+        self.stop_zmq()
     # Inicjalizacja publishera
     def publisher_init(self):
         # Utworzenie gniazda publikującego [7]
@@ -138,7 +121,7 @@ class DistributedMonitor():
         pub_ctx = zmq.Context()
         # Gniazdo Publishera
         self.pub_sock = pub_ctx.socket(zmq.PUB)
-        # Łączenie gniazda z my ID --> IP:PORT
+        # Łączenie gniazda z my_id --> IP:PORT
         self.pub_sock.bind("tcp://"+self.my_id)
         '''  DO PRZETESTOWANIA [7]
         time.sleep(1)
@@ -178,13 +161,6 @@ class DistributedMonitor():
     def send_token(self, receiver):
         # Odebranie sobie tokenu
         self.got_token = False
-        # TODO: Wspólne komunikaty (z resztą grupy) do testowania między językami!
-        # snd_msg = ExchangeMsg(rcvfrom=self.my_id, 
-        #     Qsize=self.Q.__sizeof__, Q=self.Q, 
-        #     LNsize=self.LN.__sizeof__, LN=self.LN, 
-        #     SDsize=self.shared_obj.__sizeof__, SD=self.shared_obj,
-        #     sendto=receiver)
-        # Tworzenie komunikatu
         snd_msg = ExchangeMsg(
             # Nadawca
             rcvfrom=self.my_id,
@@ -192,13 +168,69 @@ class DistributedMonitor():
             Q=self.Q, LN=self.LN, SD=self.shared_obj,
             # Odbiorca tokenu
             sendto=receiver)
-        # Wysyłanie spakowanego komunikatu
-        myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")
         sending_token_msg = pickle.dumps(snd_msg)
         # NOTE: Debugowanie komunikatu
         # myLogger.debug("Pickled Sending msg: " + str(sending_token_msg) + " Size: " + str(sys.getsizeof(sending_token_msg)) + ".")
+        # Wysyłanie spakowanego komunikatu
+        myLogger.debug("Sending token from: " + self.my_id + " to: " + receiver + ".")
         self.pub_sock.send(sending_token_msg)
         myLogger.debug("Token sent from: " + self.my_id + " to: " + receiver + ".")
+    # Obsługa komunikatu otrzymywania tokenu
+    def getting_token_handler(self, unpickled_msg, rcvfrom_id):  
+        myLogger.debug("Received token from: "+ rcvfrom_id)
+        # Aktualizujemy swoje wartości Q i LN wartościami z tokenu
+        self.Q = unpickled_msg.Q
+        self.LN = unpickled_msg.LN
+        # Wchodzę do sekcji krytycznej (po to prosiłem o token)
+        self.in_cs = True
+        # Ustawiamy flagę posiadania tokenu na True
+        self.got_token = True
+        # Wstawiamy go do Kolejki by czekając getem dostać SharedData
+        self.rcv_que.put(unpickled_msg.SD)
+    # Obsługa komunikatu RNi update
+    def rni_update_handler(self, unpickled_msg, rcvfrom_id):
+        # Aktualizujemy pole rni odpowiedniego procesu
+        self.RNi[rcvfrom_id] = \
+            max(self.RNi[rcvfrom_id], unpickled_msg.rni)
+        # Posiadając token 
+        if self.got_token == True:
+            # Jeżeli nie jesteśmy w sekcji krytycznej
+            if self.in_cs == False:
+                # Jeżeli to jest nowe żądanie (RNi[j]==LN[j]+1)
+                if self.RNi[rcvfrom_id] == (self.LN[rcvfrom_id] + 1):
+                    # Wysyłamy token
+                    self.send_token(receiver=rcvfrom_id)
+    # Obsługa komunikatu wakeupcall
+    def wake_up_call_handler(self, unpickled_msg):
+        # Jeżeli to wiadomość do mnie (wakeup)
+        if unpickled_msg.sendto == self.my_id:
+            # Jeśli śpię to oznacza, że mam się obudzić
+            if self.am_i_sleeping:
+                self.am_i_sleeping = False
+                # Wstajemy
+                myLogger.debug("Waking up.")
+                self.wake_up_call.put(True)
+            else: 
+                myLogger.warn("Received wake up msg, but I am awake.")
+        # Jeżeli to wiadomość do wszystkich
+        elif unpickled_msg.sendto is None:
+            # Jeśli śpię to oznacza, że mam się obudzić
+            if self.am_i_sleeping:
+                self.am_i_sleeping = False
+                # Wstajemy
+                myLogger.debug("Waking up.")
+                self.wake_up_call.put(True)
+            # Wyczyść listę śpiących
+            self.sleeping_list.clear()
+            myLogger.debug("Cleared sleeping list.")
+        # Wiadomość do konkretnej osoby
+        else:
+            # Usuwamy ją z listy śpiących osób
+            if unpickled_msg.sendto in self.sleeping_list:
+                self.sleeping_list.remove(unpickled_msg.sendto)
+                myLogger.debug("Removed from sleeping list: " + str(unpickled_msg.sendto))
+            else:
+                myLogger.warn("This process is not in my sleeping list: " + str(unpickled_msg.sendto))
     # Funkcja do odbierania wiadomości
     def receiver_fun(self):
         # Pętla działająca dopóki nie wyłączymy wątku odbiornika
@@ -219,37 +251,30 @@ class DistributedMonitor():
                     unpickled_msg = pickle.loads(rcv_msg)
                     # Dla wygody przepisanie id z komunikatu
                     rcvfrom_id = unpickled_msg.rcvfrom
-                    myLogger.debug("Received msg from: " + rcvfrom_id)
+                    # myLogger.debug("Received msg from: " + str(rcvfrom_id))
+                    # Jeżeli Id nadawcy jest niczym to otrzymaliśmy wake up call
+                    if rcvfrom_id is None:
+                        self.wake_up_call_handler(unpickled_msg=unpickled_msg)
                     # Jeżeli pole rni nie jest niczym - dostaliśmy REQUEST (prośbę o token)
-                    if unpickled_msg.rni is not None:
-                        # Aktualizujemy pole rni odpowiedniego procesu
-                        self.RNi[rcvfrom_id] = \
-                            max(self.RNi[rcvfrom_id], unpickled_msg.rni)
-                        # Posiadając token 
-                        if self.got_token == True:
-                            # Jeżeli nie jesteśmy w sekcji krytycznej
-                            if self.in_cs == False:
-                                # Jeżeli to jest nowe żądanie (RNi[j]==LN[j]+1)
-                                if self.RNi[rcvfrom_id] == (self.LN[rcvfrom_id] + 1):
-                                    # Wysyłamy token
-                                    self.send_token(receiver=rcvfrom_id)
-                    # W przeciwnym wypadku chodzi o token (rni is None)
-                    # jeżeli do nas szła wiadomość to przyjmujemy token
+                    elif unpickled_msg.rni is not None:
+                        self.rni_update_handler(unpickled_msg=unpickled_msg,rcvfrom_id=rcvfrom_id)
+                    # W przeciwnym wypadku chodzi o token (rni is None) lub sleep 
+                    # Jeżeli do nas szła wiadomość to przyjmujemy token
                     elif unpickled_msg.sendto == self.my_id:
-                        myLogger.debug("Received token from: "+ rcvfrom_id)
-                        # Aktualizujemy swoje wartości Q i LN wartościami z tokenu
-                        self.Q = unpickled_msg.Q
-                        self.LN = unpickled_msg.LN
-                        # Wstawiamy go do Kolejki by czekając getem dostać SharedData
-                        self.rcv_que.put(unpickled_msg.SD)
-                        # Ustawiamy flagę posiadania tokenu na True
-                        self.got_token = True
+                        self.getting_token_handler(unpickled_msg=unpickled_msg,rcvfrom_id=rcvfrom_id)
+                    # Jeżeli wiadomość była wysłana do wszystkich (sendto is None)  
+                    # Ale (co wcześniej ustaliliśmy) RNi jest puste
+                    # oraz Rcvfrom nie jest puste to jest to wiadomość sleep 
+                    elif unpickled_msg.sendto is None:
+                        # NOTE: Obsługa komunikatu sleep
+                        # Dodajemy go na listę śpiących osób
+                        self.sleeping_list.append(rcvfrom_id)
         # Jeżeli self.rcv_running jest ustawione na False
         # to wychodzimy z pętli while self.rcv_running
         # Zamykamy gniazdo subskrybenta
         self.sub_sock.close()
         myLogger.debug("ZMQ stopped.")
-    # Czeka, aż współpracownik będzie możliwy do połączenia
+    # Funkcja oczekiwania, aż współpracownik będzie możliwy do połączenia
     def wait_untill_connected(self, coworker):
         # Tymczasowy socket do sprawdzenia połączenia ze współpracownikiem
         # "Context to automatically close something at the end of a block."
@@ -313,7 +338,7 @@ class DistributedMonitor():
     def release(self, shared_data_obj):
         # Zamek na czas opuszczania strefy krytycznej
         with self.lock:
-            myLogger.debug("Trying to release SD. My id:" + self.my_id + ".")
+            myLogger.debug("Trying to release SD.")
             # Aktualizuję współdzielony obiekt 
             self.shared_obj = shared_data_obj
             # Po wykonaniu sekcji krytycznej:
@@ -347,16 +372,16 @@ class DistributedMonitor():
                 self.send_token(receiver=next_receiver)
             # Wychodzę z sekcji krytycznej
             self.in_cs = False
-            myLogger.debug("Exited Critical Section. My id:" + self.my_id + ".")
+            myLogger.debug("Exited Critical Section.")
     # Publikacja zaktualizowanej swojej wartości w tablicy RNi wysyłając żądanie tokenu
     def pub_REQUEST(self):
         # Tworzenie komunikatu REQUEST zawierającego Pi_id i RNi[i]
         snd_msg = ExchangeMsg(rcvfrom=self.my_id, rni=self.RNi[self.my_id])
-        # Wysyłanie spakowanego komunikatu
-        myLogger.debug("Sending REQUEST for token. My id:" + self.my_id + ".")
         sending_REQUEST_msg = pickle.dumps(snd_msg)
         # NOTE: Debugowanie komunikatu
         # myLogger.debug("Pickled Sending msg: " + str(sending_REQUEST_msg) + " Size: " + str(sys.getsizeof(sending_REQUEST_msg)) + ".")
+        # Wysyłanie spakowanego komunikatu
+        myLogger.debug("Sending REQUEST for token.")
         self.pub_sock.send(sending_REQUEST_msg)
     # Zdobycie dostępu do zasobu (współdzielonego obiektu danych)
     # jako wynik działania funkcji zwraca obiekt współdzielony
@@ -364,10 +389,10 @@ class DistributedMonitor():
         # Zamek na czas wchodzenia do Sekcji Krytycznej
         # lub wysyłania komunikatu REQUEST jeżeli nie mamy tokenu
         with self.lock:
-            myLogger.debug("Trying to acquire... My id:" + self.my_id + ".")
+            myLogger.debug("Trying to acquire...")
             # Jezeli mam token to:
             if self.got_token:
-                myLogger.debug("Already had token. My id:" + self.my_id + ".")
+                myLogger.debug("Already had token.")
                 # Wchodzę do sekcji krytycznej
                 self.in_cs = True
                 # Zwracam współdzielony obiekt 
@@ -383,13 +408,76 @@ class DistributedMonitor():
         # innymi słowy
         # Blokujemy się w tym miejscu, aż w kolejce rcv_que będziemy 
         # mieli gotowy obiekt współdzielony (aż nie będzie wykonany put na self.rcv_que)
-        myLogger.debug("Waiting for token... My id:" + self.my_id + ".")
+        myLogger.debug("Waiting for token...")
         self.shared_obj = self.rcv_que.get(block=True)
-        myLogger.debug("Got token. My id:" + self.my_id + ".")
-        # Wchodzę do sekcji krytycznej
-        self.in_cs = True
+        myLogger.debug("Got token.")
+        # NOTE: Jeżeli otrzymaliśmy token to już jesteśmy w sekcji krytycznej
+        # bo po to otrzymywaliśmy token
         # Zwracam współdzielony obiekt 
         return self.shared_obj
+    # Wysłanie wiadomości obudźcie mnie jak coś się stanie
+    def send_sleep(self):
+        # Tworzenie komunikatu Sleep zawierającego tylko rcvfrom
+        snd_msg = ExchangeMsg(rcvfrom=self.my_id)
+        sending_wake_me_msg = pickle.dumps(snd_msg)
+        # NOTE: Debugowanie komunikatu
+        # myLogger.debug("Pickled Sending msg: " + str(sending_wake_me_msg) + " Size: " + str(sys.getsizeof(sending_wake_me_msg)) + ".")
+        # Wysyłanie spakowanego komunikatu
+        myLogger.debug("Sending Sleep.")
+        self.pub_sock.send(sending_wake_me_msg)
+    # Jezeli z jakiś powodów nie chcę teraz przetwarzać zmiennej współdzielonej
+    # to idę spać i informuję o tym resztę (np pusty bufor)
+    def going_sleep(self, shared_data_obj):
+        # Próbuję oddać token (wychodzę z sekcji krytycznej)
+        myLogger.debug("Release before sleep.")
+        self.release(shared_data_obj)
+        with self.lock:
+            # Wysyłam wiadomość obudźcie mnie jak coś się stanie
+            self.send_sleep()
+            self.am_i_sleeping = True
+        # Zatrzymuję się, aż do wiadomości wakeup w wątku pobocznym odbiornika
+        return self.wake_up_call.get(block=True)
+    # Jeżeli z jakiś powodów chcemy kogoś obudzić bo np dodaliśmy coś do bufora
+    # To wykorzystamy wakeup - żeby wybudzić pierwszą znaną nam śpiocha
+    def wake_up(self):
+        with self.lock:
+            # Tworzenie komunikatu wakeup zawierającego tylko sendto
+            if self.sleeping_list:
+                snd_msg = ExchangeMsg(rcvfrom=None, sendto=self.sleeping_list.pop(0))
+                sending_wake_up_msg = pickle.dumps(snd_msg)
+                # NOTE: Debugowanie komunikatu
+                # myLogger.debug("Pickled Sending msg: " + str(sending_wake_up_msg) + " Size: " + str(sys.getsizeof(sending_wake_up_msg)) + ".")
+                # Wysyłanie spakowanego komunikatu
+                myLogger.debug("Sending WakeUp.")
+                self.pub_sock.send(sending_wake_up_msg)
+            else:
+                myLogger.debug("As far as I know... nobody is sleeping.")
+    # Podobnie jak wakeup - tylko wysyłamy do None - czyli wszystkich
+    def wake_up_all(self):
+        with self.lock:
+            # Tylko jeżeli ktoś śpi
+            if self.sleeping_list:
+                # Tworzenie komunikatu wakeupall (wszystko na None)
+                snd_msg = ExchangeMsg(rcvfrom=None, sendto=None)
+                sending_wake_up_all_msg = pickle.dumps(snd_msg)
+                # NOTE: Debugowanie komunikatu
+                # myLogger.debug("Pickled Sending msg: " + str(sending_wake_up_all_msg) + " Size: " + str(sys.getsizeof(sending_wake_up_all_msg)) + ".")
+                # Wysyłanie spakowanego komunikatu
+                myLogger.debug("Sending WakeUpALL.")
+                self.pub_sock.send(sending_wake_up_all_msg)
+            else:
+                myLogger.debug("As far as I know... nobody is sleeping.")
+    # NOTE: WRAPPER na funkcje sleep i wake up, 
+    # aby ich nazwy były bardziej intuicyjne:
+    # Going sleep umożliwia edycję zmiennej w przeciwieństwie do wait
+    def wait(self):
+        # Ignoruje jakiekolwiek zmiany w obiekcie współdzielonym
+        # Oddajemy do systemu obiekt, który dostaliśmy
+        self.going_sleep(self.shared_obj)
+    def notify(self):
+        self.wake_up()
+    def notifyAll(self):
+        self.wake_up_all()
 
 
 # Funkcja main do debugowania.
