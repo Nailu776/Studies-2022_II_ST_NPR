@@ -203,7 +203,13 @@ pipenv run python prod_wakeup.py 1 127.0.0.1:7777 127.0.0.1:7776 127.0.0.1:7775
 pipenv run python kons_sleep.py 0 127.0.0.1:7776 127.0.0.1:7777 127.0.0.1:7775
 pipenv run python kons_sleep.py 0 127.0.0.1:7775 127.0.0.1:7777 127.0.0.1:7776
 ```
-
+### 1.4.5 Prezentacja na 4 wirtualnych maszynach 
+```
+pipenv run python prod_wakeup.py 1 192.168.0.12:7777 192.168.0.13:7776 192.168.0.14:7775 192.168.0.15:7774
+pipenv run python prod_wakeup.py 0 192.168.0.13:7776 192.168.0.14:7775 192.168.0.15:7774 192.168.0.12:7777
+pipenv run python kons_sleep.py 0 192.168.0.14:7775 192.168.0.15:7774 192.168.0.12:7777 192.168.0.13:7776 
+pipenv run python kons_sleep.py 0 192.168.0.15:7774 192.168.0.12:7777 192.168.0.13:7776 192.168.0.14:7775 
+``` 
 ### 1.5 Przydatne linki
 Spis linków pomocnych w zrozumieniu implementacji Distr_Monit.py  
 Zmniejszając ilość komentarzy w pliku Distr_Monit.py, które mogłyby zmniejszyć czytelność kodu.  
