@@ -1,0 +1,20 @@
+# Plik Links.txt zawierający spis linków pomocnych w zrozumieniu Distr_Monit.py
+# Zmniejszając ilość komentarzy, które mogłyby zmniejszyć czytelność kodu.
+# Przydatne aktywne (do czasu) linki:
+# [0] https://www.geeksforgeeks.org/suzuki-kasami-algorithm-for-mutual-exclusion-in-distributed-system/
+# [1] https://docs.python.org/3/library/queue.html?highlight=queue#module-queue
+# [2] https://docs.python.org/3/library/threading.html
+# [3] https://github.com/zeromq/pyzmq
+# $ pipenv install pyzmq
+# [4] https://docs.python.org/3/library/contextlib.html
+# [5] https://docs.python.org/3/library/socket.html?highlight=socket#module-socket
+# [6] https://docs.python.org/3/library/pickle.html
+# [7] https://zguide.zeromq.org/docs/chapter5/
+    # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63
+    # https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-2-2f63
+    # NOTE: BLOKUJĄCY SPOSOB
+    # Odbiór wiadomości w formacie string 
+    # sub_sock.recv_string()
+# [8] https://docs.python.org/3/library/socket.html
+# [9] https://www.pythontutorial.net/advanced-python/python-threading/
+# [10] https://www.geeksforgeeks.org/python-daemon-threads/

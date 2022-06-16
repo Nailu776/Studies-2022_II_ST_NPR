@@ -1,0 +1,24 @@
+# Wspólne rozwiązanie z resztą grupy
+
+# Komunikacja ZMQ: PUB-SUB
+
+# Założenie - token wygląda następująco: 
+# (znak '|' służy tylko rozdzieleniu poszczególnych składowych tokenu)
+# |rozmiar(kolejki)|kolejka Q|
+# |rozmiar(tablicy)|tablica LN|
+# |rozmiar(zmiennych współdzielonych)|zmienne współdzielone|
+# gdzie rozmiar ma ustaloną wielkość 32 bitów i oznacza rozmiar obiektu w nawiasach ()
+
+# KOMUNIKATY:
+#   REQUEST: 
+#       - wysłanie swojego ID oraz swojej wartości RNi[i]
+#   TOKEN:
+#       - wysłanie tokenu pierwszemu procesowi z kolejki Q
+
+# Implementacja tokenu:
+# Funkcja do konwersji obiektu
+def conv_obj(Qsize, Q, LNsize, LN, SDsize, SD, to_token=True):
+    pass
+# Funkcja do konwersji tokenu 
+def conv_token():
+    pass
