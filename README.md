@@ -4,7 +4,7 @@ Repozytorium przeznaczone na przedmiot Narzędzia Przetwarzania Rozproszonego (N
 ## 1. Implementacja rozproszonego monitora w ØMQ
 ### 1.0 Wymagania
  - Python
- - PyZmq 
+ - PyZmq (https://github.com/zeromq/pyzmq)
  ```
  $ pipenv install pyzmq
  ```
