@@ -16,11 +16,23 @@ def signal_handler(sig, frame):
     dMonitor.end_work()
     sys.exit(0)
 
+class Product():
+    def __init__(self):
+        self.buffer = []
+        self.counter = 0
+    def add(self, num):
+        self.buffer.append(num)
+        self.counter +=1
+    def rm(self):
+        self.counter -=1
+        return self.buffer.pop(0)
+    def exists(self):
+        return bool(self.counter)
 
 # Funkcja main.
 if __name__ == "__main__":
     # Init rozproszonego monitora
-    dMonitor = DistributedMonitor(sys.argv[2], sys.argv[1], sys.argv[2:])
+    dMonitor = DistributedMonitor(sys.argv[2], sys.argv[1], sys.argv[2:], Product())
     # Handler zakończenia CTRL+C
     signal.signal(signal.SIGINT, signal_handler)
     # Produkuj liczby od 1 do 5
@@ -30,12 +42,8 @@ if __name__ == "__main__":
         produkt = dMonitor.acquire()
         # Modyfikuj zasób
         liczba +=1
-        if not produkt:
-            produkt = [liczba]
-            myLogger.info("Produkuje produkt: " + str(produkt))
-        else:
-            produkt.append(liczba)
-            myLogger.info("Produkuje produkt: " + str(produkt))
+        produkt.add(liczba)
+        myLogger.info("Produkuje produkt: " + str(produkt))
         # Przetrzymaj przez chwilę zasób
         time.sleep(1)
         # Zwolnij zasób

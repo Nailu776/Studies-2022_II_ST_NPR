@@ -20,7 +20,7 @@ def signal_handler(sig, frame):
 # Funkcja main.
 if __name__ == "__main__":
     # Init rozproszonego monitora
-    dMonitor = DistributedMonitor(sys.argv[2], sys.argv[1], sys.argv[2:])
+    dMonitor = DistributedMonitor(sys.argv[2], sys.argv[1], sys.argv[2:], [0])
     # Handler zakończenia CTRL+C
     signal.signal(signal.SIGINT, signal_handler)
     # Produkuj liczby od 1 do 5

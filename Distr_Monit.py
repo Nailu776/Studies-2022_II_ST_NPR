@@ -49,7 +49,7 @@ class ExchangeMsg():
 # Wykorzystujący do komunikacji mechanizm ZMQ PUB-SUB 
 class DistributedMonitor():
     # Init monitora rozproszonego
-    def __init__(self, id_ip_port, is_token_acquired, coworkers):
+    def __init__(self, id_ip_port, is_token_acquired, coworkers, init_shared_data):
         # Zmiana nazwy loggera na identyfikator 
         myLogger.name = "ID: " + id_ip_port
         # Zaimplementowany algorytm wzajemnego wykluczania: suzuki-kasami [0]
@@ -86,7 +86,7 @@ class DistributedMonitor():
         # Czy ten proces wszedł do sekcji krytycznej
         self.in_cs = False
         # Zmienne współdzielone spakowane do obiektu
-        self.shared_obj = None
+        self.shared_obj = init_shared_data
         # Kolejka z blokującą metodą get - dopiero, gdy coś będzie w kolejce
         # pobierzemy to do swojego self.shared_obj
         # Kolejkę uzupełniamy (put) przy odbieraniu tokenu 
