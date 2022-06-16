@@ -281,17 +281,9 @@ class DistributedMonitor():
         # "Context to automatically close something at the end of a block."
         coworker_IP, coworker_PORT = coworker.split(":")
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as tmp_sock:
-            try:
-                # Connect - czeka dopóki się nie połączy / 
-                # nie rzuci ConnectionRefusedError [8]
-                tmp_sock.connect((coworker_IP, int(coworker_PORT)))
-            except ConnectionRefusedError:
-                # Ponowienie próby połączenia
-                self.wait_untill_connected(coworker)
-            finally:
-                if self.conn_logged == False:
-                    self.conn_logged = True
-                    myLogger.debug("Coworker: " + str(coworker) + " connected.")
+            while (tmp_sock.connect_ex((coworker_IP, int(coworker_PORT))) != 0) :
+                continue
+            myLogger.debug("Coworker: " + str(coworker) + " connected.")
     # Oczekiwanie na wszystkich współpracowników
     def waiting_for_coworkers(self):
         # Lista współpracowników (poza nami)
