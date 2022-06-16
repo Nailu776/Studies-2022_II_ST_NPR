@@ -75,7 +75,7 @@ class ExchangeMsg():
 # Wykorzystujący do komunikacji PUB-SUB zmq
 class DistributedMonitor():
     def end_work(self):
-        # NOTE: PROBLEM ZGUBIONEGO TOKENU
+        # NOTE: PROBLEM ZGUBIONEGO TOKENU Kiedy ktoś się niespodziewanie rozłączy
         myLogger.debug("Adios. My id: " + self.my_id + ".")
         # Zatrzymanie komunikacji
         self.stop_zmq()
