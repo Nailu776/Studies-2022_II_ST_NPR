@@ -203,3 +203,21 @@ pipenv run python prod_wakeup.py 1 127.0.0.1:7777 127.0.0.1:7776 127.0.0.1:7775
 pipenv run python kons_sleep.py 0 127.0.0.1:7776 127.0.0.1:7777 127.0.0.1:7775
 pipenv run python kons_sleep.py 0 127.0.0.1:7775 127.0.0.1:7777 127.0.0.1:7776
 ```
+
+### 1.5 Przydatne linki
+Spis linków pomocnych w zrozumieniu implementacji Distr_Monit.py  
+Zmniejszając ilość komentarzy w pliku Distr_Monit.py, które mogłyby zmniejszyć czytelność kodu.  
+Przydatne aktywne (do czasu) linki:  
+[0] https://www.geeksforgeeks.org/suzuki-kasami-algorithm-for-mutual-exclusion-in-distributed-system/  
+[1] https://docs.python.org/3/library/queue.html?highlight=queue#module-queue  
+[2] https://docs.python.org/3/library/threading.html  
+[3] https://github.com/zeromq/pyzmq  
+[4] https://docs.python.org/3/library/contextlib.html  
+[5] https://docs.python.org/3/library/socket.html?highlight=socket#module-socket  
+[6] https://docs.python.org/3/library/pickle.html  
+[7] https://zguide.zeromq.org/docs/chapter5/  
+    https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-1-2f63  
+    https://dev.to/dansyuqri/pub-sub-with-pyzmq-part-2-2f63  
+[8] https://docs.python.org/3/library/socket.html  
+[9] https://www.pythontutorial.net/advanced-python/python-threading/  
+[10] https://www.geeksforgeeks.org/python-daemon-threads/  
